@@ -35,12 +35,13 @@ const exerciseSchema = new mongoose.Schema({
 
 const userSchema = new mongoose.Schema({
   username: String,
-});
+},{versionKey:false});
 
 const exerciseModel = mongoose.model('Exercise', exerciseSchema);
-const userModel = mongoose.model('User', userSchema);
+const userModel = mongoose.model('Create', userSchema);
 
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.json())
 
 //create users
 app.post("/api/users", async (req, res) => {
@@ -54,6 +55,8 @@ app.post("/api/users", async (req, res) => {
       _id: user._id
     });
   } catch (err) {
+   
+    console.error("Error creating a new user:", err);
     res.status(500).json({ error: "Failed to create a new user" });
   }
 });
@@ -61,57 +64,68 @@ app.post("/api/users", async (req, res) => {
 app.get("/api/users",async(req,res)=>{
   try {
     const allusers = await userModel.find()
-    res.json.send(allusers);
+    res.json(allusers);
   } catch (err) {
+    console.error("Error creating a new user:", err);
     res.status(500).json({ error: "Cannot ge users" });
   }
+  
 })
 //get a user log of exercises by id
 app.get("/api/users/:_id/logs", async (req, res) => {
   try {
     const userId = req.params._id;
-    const user = await userModel.findById(_id);
-    const {from, to, limit} = req.query
+    const user = await userModel.findById(userId);
+    const { from, to, limit } = req.query;
+
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
-    let filter = {userId}
-    let dateFilter = {}
 
-    if(from){
-      dateFilter["gte"] = new Date(from)
+    let filter = { user: userId };
+    let dateFilter = {};
+
+    if (from) {
+      dateFilter["gte"] = new Date(from);
     }
-    if(to){
-      dateFilter["lte"] = new Date(to)
+    if (to) {
+      dateFilter["lte"] = new Date(to);
     }
-    if(from || to){
+    if (from || to) {
       filter.date = dateFilter;
     }
-    if(limit){
-      dateFilter = dateFilter.slice(0, limit);
+
+    let query = exerciseModel.find(filter);
+
+    if (limit) {
+      query = query.limit(parseInt(limit));
     }
-   
-    const log = await exerciseModel.find(filter).limit();
+
+    const log = await query.exec();
+    const logs = log.map((exercise) => ({
+      description: exercise.description,
+      duration: exercise.duration,
+      date: exercise.date.toDateString(),
+    }));
 
     res.json({
       username: user.username,
       count: log.length,
-      _id: user._id,
-      log: log.map((exercise) => ({
-        description: exercise.description,
-        duration: exercise.duration,
-        date: exercise.date.toDateString(),
-      }))
+      _id: userId,
+      log: logs,
     });
   } catch (err) {
+    console.error("Error retrieving exercise log:", err);
     res.status(500).json({ error: "Failed to retrieve exercise log" });
   }
 });
+
 //get user exercise by id
 app.post("/api/users/:_id/exercises", async (req, res) => {
   try {
-    const { description, duration, date } = req.body;
-    const { userId} = req.body[":_id"];
+    let { description, duration, date} = req.body;
+    const userId =  req.body[":_id"];
+    console.log(userId)
 
     const user = await userModel.findById(userId);
 
@@ -123,7 +137,6 @@ app.post("/api/users/:_id/exercises", async (req, res) => {
       description,
       duration,
       date,
-      user: user.userId,
     });
     if (!date) {
       const currentDate = new Date();
@@ -135,13 +148,14 @@ app.post("/api/users/:_id/exercises", async (req, res) => {
     await user.save();
 
     res.json({
-      username: user.username,
-      description: exercise.description,
-      duration: exercise.duration,
-      date: exercise.date.toDateString(),
-      _id: exercise._id,
+      username: user,
+      description,
+      duration,
+      date,
+      _id: userId,
     });
   } catch (err) {
+    console.error("Error creating a new user:", err);
     res.status(500).json({ error: "Failed to add exercise" });
   }
 });

@@ -28,9 +28,11 @@ db.once('open', function () {
 connect();
 
 const exerciseSchema = new mongoose.Schema({
+  username: String,
   description: String,
   duration: Number,
   date: Date,
+  userId:String
 },{versionKey:false});
 
 const userSchema = new mongoose.Schema({
@@ -72,45 +74,105 @@ app.get("/api/users",async(req,res)=>{
   
 })
 //get a user log of exercises by id
+// app.get("/api/users/:_id/logs", async (req, res) => {
+//   try {
+//     const userId = req.params._id;
+//     const user = await userModel.findById(userId);
+//     // const { from, to, limit } = req.query;
+
+//     if (!user) {
+//       return res.status(404).json({ error: "User not found" });
+//     }
+
+//     // let filter = { userId };
+//     // let dateFilter = {};
+
+//     // if (from) {
+//     //   dateFilter["gte"] = new Date(from);
+//     // }
+//     // if (to) {
+//     //   dateFilter["lte"] = new Date(to);
+//     // }
+//     // if (from || to) {
+//     //   filter.date = dateFilter;
+//     // }
+//     let log = await exerciseModel.find();
+//     console.log(log)
+//     if(!log){
+//       return res.status(404).json({ error: "log not found" }); 
+//     }
+//     // if (limit) {
+//     //   log = log.limit(parseInt(limit));
+//     // }
+  
+   
+//     // exerciseModel
+
+//     log = log.map((exercise) => {
+//       return{
+//         description: exercise.description,
+//         duration: exercise.duration,
+//         date: exercise.date.toDateString(),
+//       }
+//     });
+
+//     res.json({
+//       username: user.username,
+//       count: log.length,
+//       _id: userId,
+//       log: log,
+//     });
+//   } catch (err) {
+//     console.error("Error retrieving exercise log:", err);
+//     res.status(500).json({ error: "Failed to retrieve exercise log" });
+//   }
+// });
 app.get("/api/users/:_id/logs", async (req, res) => {
   try {
     const userId = req.params._id;
     const user = await userModel.findById(userId);
-    const { from, to, limit } = req.query;
+    let { from, to, limit } = req.query;
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    let filter = { user: userId };
+    let filter = { userId };
     let dateFilter = {};
-
     if (from) {
-      dateFilter["gte"] = new Date(from);
+      dateFilter.$gte = new Date(from);
     }
     if (to) {
-      dateFilter["lte"] = new Date(to);
+      dateFilter.$lte = new Date(to);
     }
     if (from || to) {
       filter.date = dateFilter;
     }
-
-    let query = exerciseModel.find(filter);
-
-    if (limit) {
-      query = query.limit(parseInt(limit));
+    if (!limit) {
+      limit = 20;
     }
 
-    const log = await query.exec();
-    const logs = log.map((exercise) => ({
-      description: exercise.description,
-      duration: exercise.duration,
-      date: exercise.date.toDateString(),
-    }));
+    const log = await exerciseModel.find(filter).limit(parseInt(limit));
+
+    if (!log || log.length === 0) {
+      return res.status(404).json({ error: "Exercise log not found" });
+    }
+
+    const logs = log.map((exercise) => {
+      const currentDate = exercise.date && exercise.date.currentDate
+        ? exercise.date.currentDate.toDateString()
+        : new Date().toDateString();
+
+      return {
+        description: exercise.description,
+        duration: exercise.duration,
+        date: currentDate,
+      };
+    });
 
     res.json({
       username: user.username,
-      count: log.length,
+      count: logs.length,
       _id: userId,
       log: logs,
     });
@@ -134,9 +196,11 @@ app.post("/api/users/:_id/exercises", async (req, res) => {
     }
 
     const exercise = new exerciseModel({
+      username:user.username,
       description,
       duration,
       date,
+      userId
     });
     if (!date) {
       const currentDate = new Date();
@@ -148,7 +212,7 @@ app.post("/api/users/:_id/exercises", async (req, res) => {
     await user.save();
 
     res.json({
-      username: user,
+      username: user.username,
       description,
       duration,
       date,
@@ -159,6 +223,10 @@ app.post("/api/users/:_id/exercises", async (req, res) => {
     res.status(500).json({ error: "Failed to add exercise" });
   }
 });
+app.get("/api/users/:_id/exercise",async(req,res)=>{
+  const exer = await exerciseModel.find();
+  res.json(exer)
+})
 
 const listener = app.listen(process.env.PORT || 3000, () => {
   console.log('Your app is listening on port ' + listener.address().port);
